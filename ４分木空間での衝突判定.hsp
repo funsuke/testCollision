@@ -1,0 +1,617 @@
+#define global	ctype max(%1,%2)	((%1)*((%1)>=(%2))+(%2)*((%1)<(%2)))
+#const	global	CHARA_NUM	500
+#const	global	CELL_LEVEL	4
+#const	global	WIN_W		480
+#const	global	WIN_H		480
+
+
+//**************************************************************
+// 整数配列スタックモジュール
+//**************************************************************
+#module M_ARRAYSTACK _mArray, _mLength
+	//==============================
+	// 初期化処理
+	//==============================
+	#modinit
+		dim _mArray
+		_mLength = 0
+		return
+	//==============================
+	// 解放処理
+	//==============================
+	#modterm
+		aryClear thismod
+		return
+	//==============================
+	// 要素の追加(スタック用Push)
+	//==============================
+	#modfunc aryPush int _element
+		_mArray._mLength = _element
+		_mLength ++
+		return _mLength
+	//==============================
+	// 配列の追加(配列追加)
+	//==============================
+	#modfunc aryPushArray var _array
+		repeat aryLength(_array)
+			aryPush thismod, aryGet(_array,cnt)
+		loop
+		return _mLength
+	//==============================
+	// スタック用Pop
+	//==============================
+	#modfunc aryPop var _val
+		if _mLength > 0 {
+			_mLength --
+			_val = _mArray._mLength
+			return 0
+		}
+		dialog "スタックがありません！"
+		return -1
+	//==============================
+	// 要素の参照
+	//==============================
+	#modcfunc aryGet int _index
+		return _mArray._index
+	//==============================
+	// 配列の削除
+	//==============================
+	#modfunc aryClear
+		dim _mArray
+		_mLength = 0
+		return
+	//==============================
+	// 配列の長さを取得
+	//==============================
+	#modcfunc aryLength
+		return _mLength
+	//==============================
+	// デバッグ用
+	//==============================
+	#modfunc aryMes
+		repeat _mLength
+			mes strf("[%2d]:%2d",cnt,_mArray.cnt)
+		loop
+		return
+#global
+
+//**************************************************************
+// 線形四分木空間(LinearQuadTreeSpace)
+//**************************************************************
+#module M_LQTS
+	//==============================
+	// 初期化処理
+	//==============================
+	#deffunc lqtsSet int _w, int _h, int _level
+		_mW = _w
+		_mH = _h
+		_mCurrentLevel = _level
+		_mLength = int(powf(4,_level+1)-1)/3	; 線形リストの数
+;		logmes "lqtsSet::_level = " + _level
+;		logmes "lqtsSet::_mLength = " + _mLength
+		// 
+		repeat _mLength
+			newmod _mArrays, M_ARRAYSTACK
+		loop
+		// offsetの計算
+		dim _mOffset, _level+1
+		foreach _mOffset
+			_mOffset.cnt = int((powf(4,cnt)-1) / 3)
+		loop
+		return
+	//==============================
+	// 終了処理
+	//==============================
+	#deffunc lqtsEnd
+		foreach _mArrays
+			delmod _mArrays.cnt
+		loop
+		return
+	//==============================
+	// 線形リストのクリア
+	//==============================
+	#deffunc lqtsClear
+		foreach _mArrays
+			aryClear _mArrays.cnt
+		loop
+		return
+	//==============================
+	// 線形リストへ追加(モジュール内で使用)
+	//==============================
+	#deffunc _lqtsAdd int _id, int _level, int _index
+		linearIndex = _mOffset._level + _index
+		aryPush _mArrays.linearIndex, _id
+		return
+	//==============================
+	// 線形リストへキャラクタ変数を追加
+	//==============================
+	#deffunc lqtsAddChara var _chara
+		id = charaID(_chara)
+		// モートン番号の計算
+		leftTopMorton = _calc2DMortonNumber(charaLeft(_chara),charaTop(_chara))
+		rightBottomMorton = _calc2DMortonNumber(charaRight(_chara),charaBottom(_chara))
+		// 左上と右下が同じ番号に所属していたら、
+		// 一つのセルに収まっている
+		if leftTopMorton == rightBottomMorton {
+			_lqtsAdd id, _mCurrentLevel, leftTopMorton
+			return
+		}
+		// 所属レベルの計算
+		level = _calcLevel(leftTopMorton,rightBottomMorton)
+		// 所属する番号を計算
+		larger = max(leftTopMorton,rightBottomMorton)
+		cellNumber = _calcCell(larger,level)
+		// 線形四分木に追加する
+		_lqtsAdd id, level, cellNumber
+		return
+	//==============================
+	// debug用
+	//==============================
+	#defcfunc lqtsGetIndex var _chara
+		// モートン番号の計算
+		leftTopMorton = _calc2DMortonNumber(charaLeft(_chara),charaTop(_chara))
+		rightBottomMorton = _calc2DMortonNumber(charaRight(_chara),charaBottom(_chara))
+		// 左上と右下が同じ番号に所属していたら、
+		// 一つのセルに収まっている
+		if leftTopMorton == rightBottomMorton {
+			return _mOffset._mCurrentLevel + leftTopMorton
+		}
+		// 所属レベルの計算
+		level = _calcLevel(leftTopMorton,rightBottomMorton)
+		// 所属する番号を計算
+		larger = max(leftTopMorton,rightBottomMorton)
+		cellNumber = _calcCell(larger,level)
+		return _mOffset.level + cellNumber
+	//==============================
+	// 16bitの整数を1bit飛ばしの32bitにする(モジュール内で使用)
+	//==============================
+	#defcfunc _separateBit32 int _n
+		n = _n
+		n = (n|(n<<8)) & 0x00ff00ff
+		n = (n|(n<<4)) & 0x0f0f0f0f
+		n = (n|(n<<2)) & 0x33333333
+		return (n|(n<<1)) & 0x55555555
+	//==============================
+	// モートン番号の計算(モジュール内で使用)
+	//==============================
+	#defcfunc _calc2DMortonNumber int _x, int _y
+		xCell = _x / (_mW / powf(2, _mCurrentLevel))
+		yCell = _y / (_mH / powf(2, _mCurrentLevel))
+		return _separateBit32(xCell) | (_separateBit32(yCell)<<1)
+	//==============================
+	// 所属レベルの計算(モジュール内で使用)
+	//==============================
+	#defcfunc _calcLevel int _leftTopMorton, int _rightBottomMorton
+		xorMorton = _leftTopMorton ^ _rightBottomMorton
+		level = _mCurrentLevel-1
+		attachedLevel = _mCurrentLevel
+		repeat _mCurrentLevel
+			flag = (xorMorton >> (cnt*2)) & 0x3
+			if flag > 0 {
+				attachedLevel = level
+			}
+			level --
+		loop
+		return attachedLevel
+	//==============================
+	// 所属する番号を計算する(モジュール内で使用)
+	//==============================
+	#defcfunc _calcCell int _morton, int _level
+		shift = (_mCurrentLevel - _level) * 2
+		return _morton >> shift
+	//==============================
+	// 線形リストの要素を取得する
+	//==============================
+	#defcfunc lqtsGet int _level, int _i1, int _i2
+;		offset = (powf(4,_level)-1) / 3
+		linearIndex = _mOffset._level + _i1
+		return aryGet(_mArrays.linearIndex,_i2)
+	//==============================
+	// 線形リストの長さを取得する
+	//==============================
+	#defcfunc lqtsLength int _level, int _i
+;		offset = (powf(4,_level)-1) / 3
+		linearIndex = _mOffset._level + _i
+		return aryLength(_mArrays.linearIndex)
+	//==============================
+	// デバッグ用
+	//==============================
+	#deffunc lqtsMes
+		i = 0
+		foreach _mArrays
+			if aryLength(_mArrays.cnt) {
+				x = (i \ 8) * 80
+				y = (i / 8) * 80
+				pos x, y
+				mes strf("AL[%2d]",cnt)
+				aryMes _mArrays.cnt
+				i ++
+			}
+		loop
+		return
+#global
+
+//**************************************************************
+// キャラクタモジュール
+//**************************************************************
+#module M_CHARA _mID, _mType, _mX, _mY, _mW, _mH, _mVX, _mVY, _mCount
+	//==============================
+	// 初期化処理
+	//==============================
+	#modinit
+		mref _id, 2
+		_mID = _id
+		_mW = 5.0
+		_mH = 5.0
+		_mX = 1.0*rnd(WIN_W-_mW)+1
+		_mY = 1.0*rnd(WIN_H-_mH)+1
+		r = deg2rad(rnd(360))
+		_mVX = cos(r)
+		_mVY = sin(r)
+		_mType = 0
+		_mCount = 0
+		cnt_anim = 0
+		// バッファの用意
+		if buffer_id == 0 {
+			buffer_id = ginfo_newid
+			buffer buffer_id
+			color : boxf
+			color 255,255,255 : circle 0,0,5,5
+			color 255         : circle 5,0,10,5
+			color ,255        : circle 10,0,15,5
+			gsel 0
+		}
+		return
+	//==============================
+	// 解放処理
+	//==============================
+	#modterm
+		return
+	//==============================
+	// 更新メソッド
+	//==============================
+	#modfunc charaUpdate
+		// 速度分だけ移動する
+		_mX += _mVX
+		_mY += _mVY
+		// 画面から外れたら、速度を反転する
+		if _mX <= 0.0 or _mX >= WIN_W + 1 - _mW {
+			_mVX = -_mVX
+		}
+		if _mY <= 0.0 or _mY >= WIN_H + 1 - _mH {
+			_mVY = -_mVY
+		}
+		if _mType == 1 {
+			_mCount ++
+			if _mCount >= 200 : _mType == 2
+		}
+		// アニメーションカウンタ
+		cnt_anim = (cnt_anim + 1) \ 16
+		// SIRカウンタ
+		if _mID == 0 {
+			cntS = 0
+			cntI = 0
+			cntR = 0
+		}
+		if _mType == 0 {
+			cntS ++
+		} else : if _mType == 1 {
+			cntI ++
+		} else : if _mType == 2 {
+			cntR ++
+		}
+		return
+	//==============================
+	// 描画メソッド
+	//==============================
+	#modfunc charaDraw
+;		circle _mX, _mY, _mX+_mW+1, _mY+_mH+1
+		pos _mX, _mY
+		gcopy buffer_id, _mW*_mType, 0, _mW, _mH
+		// アニメーション
+		if _mType == 1 {
+			hsvcolor 0,255,255-15*cnt_anim
+			circle _mX-cnt_anim,_mY-cnt_anim,_mX+_mW+cnt_anim,_mY+_mH+cnt_anim,0
+		}
+#if 0
+		color 255,255,255
+		pos _mX+3, _mY+3
+		m1 = _calc2dmortonnumber(_mX,_mY)
+		m2 = _calc2dmortonnumber(_mX+_mW,_mY+_mH)
+		l  = _calclevel(m1,m2)
+		i  = int((powf(4,l)-1) / 3) + m2
+		mes "" + _mID + "," + l + "," + _calcCell(m2,l) + "," + i
+#endif
+		return
+	//==============================
+	// ID取得
+	//==============================
+	#modcfunc charaID
+		return _mID
+	//==============================
+	// Top取得
+	//==============================
+	#modcfunc charaTop
+		return _mY
+	//==============================
+	// Bottom取得
+	//==============================
+	#modcfunc charaBottom
+		return _mY + _mH
+	//==============================
+	// Left取得
+	//==============================
+	#modcfunc charaLeft
+		return _mX
+	//==============================
+	// Right取得
+	//==============================
+	#modcfunc charaRight
+		return _mX + _mW
+	//==============================
+	// Type取得
+	//==============================
+	#modcfunc charaType
+		return _mType
+	//==============================
+	// 衝突時メソッド
+	//==============================
+	#modfunc charaHit var _mchara
+		_mType = 1
+		charaChangeType _mchara
+		return
+	//==============================
+	// Type変更メソッド
+	//==============================
+	#modfunc charaChangeType
+		_mType = 1
+		return
+#global
+
+//**************************************************************
+// 当たり判定検出モジュール
+//**************************************************************
+#module M_COLLISION_DETECTOR
+	//==============================
+	// キャラクタ変数同士の当たり判定を検出する(矩形)
+	//==============================
+	#defcfunc detectCollision var _mchara1, var _mchara2
+		h = (charaLeft(_mchara2) < charaRight(_mchara1)) and (charaLeft(_mchara1) < charaRight(_mchara2))
+		v = (charaTop(_mchara2) < charaBottom(_mchara1)) and (charaTop(_mchara1) < charaBottom(_mchara2))
+		return h and v
+#global
+
+//**************************************************************
+// 当たり判定の実装部分など
+//**************************************************************
+#module
+	//==============================
+	// 当たり判定
+	//==============================
+	#deffunc _hitTest int _currentIndex, var _objList, local i, local hasChildren, local flgPushed
+;		logmes "currentIndex = " + _currentIndex
+		// 現在のセルの中と、衝突オブジェクトリストで
+		// 当たり判定を取る
+		_hitTestInCell _mArrays@M_LQTS._currentIndex, _objList
+		// 下位セルを持つか調べる
+		hasChildren = 0
+		flgPushed = 0
+		for i, 0, 4
+			nextIndex = _currentIndex * 4 + 1 + i
+;			logmes "mLength = " + _mLength@M_LQTS
+			// 下位セルがあったら
+			hasChildCell = (nextIndex < _mLength@M_LQTS)
+			if hasChildCell {
+				hasChildCell &= (aryLength(_mArrays@M_LQTS.nextIndex) > 0)
+				hasChildren |= hasChildCell
+				if hasChildCell {
+					// 衝突オブジェクトにpushして
+					if flgPushed == 0 {
+						aryPushArray _objList, _mArrays@M_LQTS._currentIndex
+						flgPushed == 1
+					}
+;					logmes "nextIndex = " +  nextIndex
+					// 下位セルで当たり判定を取る(再帰)
+					_hitTest nextIndex, _objList
+				}
+			}
+		next
+		// 終わったら追加したオブジェクトをpopする
+		if hasChildren {
+			popNum = aryLength(_mArrays@M_LQTS._currentIndex)
+			for i, 0, popNum
+				aryPop _objList, tmp
+			next
+		}
+		return
+	//==============================
+	// セルの中の当たり判定を取る
+	// 衝突オブジェクトリストとも取る
+	//==============================
+	#deffunc _hitTestInCell var _cell, var _objList
+		// セルの中、総当たり
+		cellLen = aryLength(_cell)
+		for i, 0, cellLen-1
+			id1 = aryGet(_cell,i)
+			type1 = charaType(mChara@.id1)
+			for j, i+1, cellLen
+				id2 = aryGet(_cell,j)
+				type2 = charaType(mChara@.id2)
+				if (type1 == 0 and type2 == 1) or (type1 == 1 and type2 == 0) {
+					hit = detectCollision(mChara@.id1,mChara@.id2)
+					if hit {
+						charaHit mChara@.id1, mChara@.id2
+					}
+				}
+			next
+		next
+		// 衝突オブジェクトリストと
+		objLength = aryLength(_objList)
+		for i, 0, objLen
+			objID = aryGet(_objList,i)
+			typeObj = charaType(mChara@.objID)
+			for j, 0, cellLen
+				cellID = aryGet(_cell,j)
+				typeCell = charaType(mChara@.cellID)
+				if (typeObj == 0 and typeCell == 1) or (typeObj == 1 and typeCell == 0) {
+					hit = detectCollision(mChara@.objID,mChara@.cellID)
+					if hit {
+						charaHit mChara@.objID, mChara@.cellID
+					}
+				}
+			next
+		next
+		return
+	//==============================
+	// 矩形描画
+	//==============================
+	#deffunc box int _x1, int _y1, int _x2, int _y2
+		line _x2, _y1, _x1, _y1
+		line _x2, _y2
+		line _x1, _y2
+		line _x1, _y1
+		return
+#global
+
+//**************************************************************
+// MAIN
+//**************************************************************
+	randomize
+
+	//------------------------------
+	// buffer
+	//------------------------------
+	buffer 1
+	color : boxf
+	//------------------------------
+	// box
+	//------------------------------
+#if CELL_LEVEL >= 4
+	color 48,48,48
+	w = WIN_W / powf(2,4)
+	h = WIN_H / powf(2,4)
+	repeat 256
+		x = (cnt \ 16) * w
+		y = (cnt / 16) * h
+		box x, y, x+w, y+h
+	loop
+#endif
+#if CELL_LEVEL >= 3
+	color 64,64,64
+	w = WIN_W / powf(2,3)
+	h = WIN_H / powf(2,3)
+	repeat 64
+		x = (cnt \ 8) * w
+		y = (cnt / 8) * h
+		box x, y, x+w,y+h
+	loop
+#endif
+#if CELL_LEVEL >= 2
+	color 80,80,80
+	w = WIN_W / powf(2,2)
+	h = WIN_H / powf(2,2)
+	repeat 16
+		x = (cnt \ 4) * w
+		y = (cnt / 4) * h
+		box x,y, x+w, y+h
+	loop
+#endif
+#if CELL_LEVEL >= 1
+	w = WIN_W / 2
+	h = WIN_H / 2
+	color 96,96,96
+	box 0,0,w,h
+	box w,0,w+w,h
+	box 0,h,w,h+h
+	box w,h,w+w,h+h
+#endif
+	color 112,112,112
+	box 0,0,WIN_W,WIN_H
+	gsel 0
+
+	cntFrame = 0	; フレームカウンタ
+	
+	// スタック
+	newmod mStack, M_ARRAYSTACK
+	// LQTS初期処理
+	lqtsSet WIN_W, WIN_H, CELL_LEVEL
+	// CHARA型変数作成
+	repeat CHARA_NUM
+		newmod mChara, M_CHARA
+	loop
+	charaChangeType mChara.0		; 0番目を感染にする
+	
+	onclick gosub *gameterm
+
+*gameloop
+	cntFrame ++
+	//------------------------------
+	// Charaの更新と登録
+	//------------------------------
+	foreach mChara
+		charaUpdate mChara.cnt
+	loop
+	lqtsClear
+	foreach mChara
+		type = charaType(mChara.cnt)
+		if type == 0 or type == 1 {
+			lqtsAddChara mChara.cnt
+		}
+	loop
+	
+	// 当たり判定
+	aryClear mStack
+	_hitTest 0, mStack
+	//------------------------------
+	// draw_start
+	//------------------------------
+	redraw 0
+	color : boxf
+	// グラフと罫線
+	gsel 1
+	color : line 480,0,639,0	; クリア
+	color 255,255,255
+	pset cntS@M_CHARA * 158 / CHARA_NUM + 481, 0
+	color 255
+	pset cntI@M_CHARA * 158 / CHARA_NUM + 481, 0
+	color ,255
+	pset cntR@M_CHARA * 158 / CHARA_NUM + 481, 0
+	pos 480, 1
+	gcopy 1, 480, 0, 160, 480
+	gsel 0
+	pos 0,0
+	gcopy 1, 0, 0, 640, 480
+	// Charaの描画
+	foreach mChara
+		charaDraw mChara.cnt
+	loop
+	// 各種数値の描画
+	color 255,255,255
+	pos 496,8
+	mes "Frame:" + cntFrame
+	mes "S:" + cntS@M_CHARA
+	mes "I:" + cntI@M_CHARA
+	mes "R:" + cntR@M_CHARA
+
+	redraw 1
+
+	if cntI@M_CHARA <= 0 : goto *gameterm
+
+	await 33
+	
+	goto *gameloop
+	
+//==============================
+// 終了処理
+//==============================
+*gameterm
+	foreach mChara
+		delmod mChara.cnt
+	loop
+	lqtsEnd
+	delmod mStack
+
+	pos 0, 0 : color 255,255,255 : mes "END"
+	
+	stop
+
