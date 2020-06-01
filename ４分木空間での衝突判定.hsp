@@ -406,7 +406,6 @@
 	// 当たり判定(四分木使用)
 	//==============================
 	#deffunc _hitTest int _currentIndex, var _objList, local idx, local hasChildren, local flgPushed
-;		logmes "currentIndex = " + _currentIndex
 		// 現在のセルの中と、衝突オブジェクトリストで
 		// 当たり判定を取る
 		_hitTestInCell _mArrays@M_LQTS._currentIndex, _objList
@@ -415,7 +414,6 @@
 		flgPushed = 0
 		for idx, 0, 4
 			nextIndex = _currentIndex * 4 + 1 + idx
-;			logmes "mLength = " + _mLength@M_LQTS
 			// 下位セルがあったら
 			hasChildCell = (nextIndex < _mLength@M_LQTS)
 			if hasChildCell {
@@ -427,7 +425,6 @@
 						aryPushArray _objList, _mArrays@M_LQTS._currentIndex
 						flgPushed == 1
 					}
-;					logmes "nextIndex = " +  nextIndex
 					// 下位セルで当たり判定を取る(再帰)
 					_hitTest nextIndex, _objList
 				}
@@ -575,7 +572,6 @@
 			lqtsAddChara mChara.cnt
 		}
 	loop
-	
 	// 当たり判定
 ;	_hitTestAll
 	aryClear mStack
