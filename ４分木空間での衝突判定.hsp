@@ -4,6 +4,14 @@
 #const	global	WIN_W		480
 #const	global	WIN_H		480
 
+#define COLLISION_LQTS
+
+#ifndef COLLISION_LQTS
+	#packopt name "当たり判定(全探索)"
+#else
+	#packopt name "当たり判定(四分木)"
+#endif
+
 //**************************************************************
 // 整数配列スタックモジュール
 //**************************************************************
@@ -86,8 +94,6 @@
 		_mH = _h
 		_mCurrentLevel = _level
 		_mLength = int(powf(4,_level+1)-1)/3	; 線形リストの数
-;		logmes "lqtsSet::_level = " + _level
-;		logmes "lqtsSet::_mLength = " + _mLength
 		// 
 		repeat _mLength
 			newmod _mArrays, M_ARRAYSTACK
@@ -233,7 +239,7 @@
 //**************************************************************
 // キャラクタモジュール
 //**************************************************************
-#module M_CHARA _mID, _mType, _mX, _mY, _mW, _mH, _mVX, _mVY, _mCount
+#module M_CHARA _mID, _mStatus, _mX, _mY, _mW, _mH, _mVX, _mVY, _mCount
 	//==============================
 	// 初期化処理
 	//==============================
@@ -247,7 +253,7 @@
 		r = deg2rad(rnd(360))
 		_mVX = cos(r)
 		_mVY = sin(r)
-		_mType = 0
+		_mStatus = 0
 		_mCount = 0
 		cnt_anim = 0
 		// バッファの用意
@@ -280,9 +286,9 @@
 		if _mY <= 0.0 or _mY >= WIN_H + 1 - _mH {
 			_mVY = -_mVY
 		}
-		if _mType == 1 {
+		if _mStatus == 1 {
 			_mCount ++
-			if _mCount >= 200 : _mType == 2
+			if _mCount >= 200 : _mStatus == 2
 		}
 		// アニメーションカウンタ
 		cnt_anim = (cnt_anim + 1) \ 16
@@ -292,11 +298,11 @@
 			cntI = 0
 			cntR = 0
 		}
-		if _mType == 0 {
+		if _mStatus == 0 {
 			cntS ++
-		} else : if _mType == 1 {
+		} else : if _mStatus == 1 {
 			cntI ++
-		} else : if _mType == 2 {
+		} else : if _mStatus == 2 {
 			cntR ++
 		}
 		return
@@ -306,9 +312,9 @@
 	#modfunc charaDraw
 ;		circle _mX, _mY, _mX+_mW+1, _mY+_mH+1
 		pos _mX, _mY
-		gcopy buffer_id, _mW*_mType, 0, _mW, _mH
+		gcopy buffer_id, _mW*_mStatus, 0, _mW, _mH
 		// アニメーション
-		if _mType == 1 {
+		if _mStatus == 1 {
 			hsvcolor 0,255,255-15*cnt_anim
 			circle _mX-cnt_anim,_mY-cnt_anim,_mX+_mW+cnt_anim,_mY+_mH+cnt_anim,0
 		}
@@ -348,22 +354,22 @@
 	#modcfunc charaRight
 		return _mX + _mW
 	//==============================
-	// Type取得
+	// Status取得
 	//==============================
-	#modcfunc charaType
-		return _mType
+	#modcfunc charaStatus
+		return _mStatus
 	//==============================
 	// 衝突時メソッド
 	//==============================
 	#modfunc charaHit var _mchara
-		_mType = 1
-		charaChangeType _mchara, 1
+		_mStatus = 1
+		charaChangeStatus _mchara, 1
 		return
 	//==============================
 	// Type変更メソッド
 	//==============================
-	#modfunc charaChangeType int _i
-		_mType = _i
+	#modfunc charaChangeStatus int _i
+		_mStatus = _i
 		return
 #global
 
@@ -389,9 +395,9 @@
 	//==============================
 	#deffunc _hitTestAll
 		for i, 0, CHARA_NUM-1
-			type1 = charaType(mChara@.i)
+			type1 = charaStatus(mChara@.i)
 			for j, i+1, CHARA_NUM
-				type2 = charaType(mChara@.j)
+				type2 = charaStatus(mChara@.j)
 				if (type1 == 0 and type2 == 1) or (type1 == 1 and type2 == 0) {
 					hit = detectCollision(mChara@.i,mChara@.j)
 					if hit {
@@ -446,10 +452,10 @@
 		cellLen = aryLength(_cell)
 		for i, 0, cellLen-1
 			id1 = aryGet(_cell,i)
-			type1 = charaType(mChara@.id1)
+			type1 = charaStatus(mChara@.id1)
 			for j, i+1, cellLen
 				id2 = aryGet(_cell,j)
-				type2 = charaType(mChara@.id2)
+				type2 = charaStatus(mChara@.id2)
 				if (type1 == 0 and type2 == 1) or (type1 == 1 and type2 == 0) {
 					hit = detectCollision(mChara@.id1,mChara@.id2)
 					if hit {
@@ -462,10 +468,10 @@
 		objLength = aryLength(_objList)
 		for i, 0, objLen
 			objID = aryGet(_objList,i)
-			typeObj = charaType(mChara@.objID)
+			typeObj = charaStatus(mChara@.objID)
 			for j, 0, cellLen
 				cellID = aryGet(_cell,j)
-				typeCell = charaType(mChara@.cellID)
+				typeCell = charaStatus(mChara@.cellID)
 				if (typeObj == 0 and typeCell == 1) or (typeObj == 1 and typeCell == 0) {
 					hit = detectCollision(mChara@.objID,mChara@.cellID)
 					if hit {
@@ -552,8 +558,13 @@
 	repeat CHARA_NUM
 		newmod mChara, M_CHARA
 	loop
-	charaChangeType mChara.0, 1		; 0番目を感染にする
-	
+	charaChangeStatus mChara.0, 1		; 0番目を感染にする
+	// タイトル
+#ifndef COLLISION_LQTS
+	title "当たり判定(全探索)"
+#else
+	title "当たり判定(四分木)"
+#endif
 *gameloop
 	cntFrame ++
 	//------------------------------
@@ -562,17 +573,25 @@
 	foreach mChara
 		charaUpdate mChara.cnt
 	loop
+
+#ifdef COLLISION_LQTS
+	// 線形リストのクリア
 	lqtsClear
+	// 線形リストへキャラクタ変数を追加
 	foreach mChara
-		type = charaType(mChara.cnt)
+		type = charaStatus(mChara.cnt)
 		if type == 0 or type == 1 {
 			lqtsAddChara mChara.cnt
 		}
 	loop
+#endif
 	// 当たり判定
-;	_hitTestAll
+#ifndef COLLISION_LQTS
+	_hitTestAll
+#else
 	aryClear mStack
 	_hitTest 0, mStack
+#endif
 	//------------------------------
 	// draw_start
 	//------------------------------
