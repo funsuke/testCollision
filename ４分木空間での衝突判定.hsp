@@ -357,13 +357,13 @@
 	//==============================
 	#modfunc charaHit var _mchara
 		_mType = 1
-		charaChangeType _mchara
+		charaChangeType _mchara, 1
 		return
 	//==============================
 	// Type変更メソッド
 	//==============================
-	#modfunc charaChangeType
-		_mType = 1
+	#modfunc charaChangeType int _i
+		_mType = _i
 		return
 #global
 
@@ -552,10 +552,8 @@
 	repeat CHARA_NUM
 		newmod mChara, M_CHARA
 	loop
-	charaChangeType mChara.0		; 0番目を感染にする
+	charaChangeType mChara.0, 1		; 0番目を感染にする
 	
-	onclick gosub *gameterm
-
 *gameloop
 	cntFrame ++
 	//------------------------------
