@@ -386,9 +386,26 @@
 //**************************************************************
 #module
 	//==============================
-	// 当たり判定
+	// 当たり判定(全探索)
 	//==============================
-	#deffunc _hitTest int _currentIndex, var _objList, local i, local hasChildren, local flgPushed
+	#deffunc _hitTestAll
+		for i, 0, CHARA_NUM-1
+			type1 = charaType(mChara@.i)
+			for j, i+1, CHARA_NUM
+				type2 = charaType(mChara@.j)
+				if (type1 == 0 and type2 == 1) or (type1 == 1 and type2 == 0) {
+					hit = detectCollision(mChara@.i,mChara@.j)
+					if hit {
+						charaHit mChara@.i, mChara@.j
+					}
+				}
+			next
+		next
+		return
+	//==============================
+	// 当たり判定(四分木使用)
+	//==============================
+	#deffunc _hitTest int _currentIndex, var _objList, local idx, local hasChildren, local flgPushed
 ;		logmes "currentIndex = " + _currentIndex
 		// 現在のセルの中と、衝突オブジェクトリストで
 		// 当たり判定を取る
@@ -396,8 +413,8 @@
 		// 下位セルを持つか調べる
 		hasChildren = 0
 		flgPushed = 0
-		for i, 0, 4
-			nextIndex = _currentIndex * 4 + 1 + i
+		for idx, 0, 4
+			nextIndex = _currentIndex * 4 + 1 + idx
 ;			logmes "mLength = " + _mLength@M_LQTS
 			// 下位セルがあったら
 			hasChildCell = (nextIndex < _mLength@M_LQTS)
@@ -560,6 +577,7 @@
 	loop
 	
 	// 当たり判定
+;	_hitTestAll
 	aryClear mStack
 	_hitTest 0, mStack
 	//------------------------------
