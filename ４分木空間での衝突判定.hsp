@@ -244,8 +244,9 @@
 	// 初期化処理
 	//==============================
 	#modinit
-		mref _id, 2
-		_mID = _id
+		mref _mID, 2
+;		mref _id, 2
+;		_mID = _id
 		_mW = 5.0
 		_mH = 5.0
 		_mX = 1.0*rnd(WIN_W-_mW)+1
@@ -361,12 +362,12 @@
 	//==============================
 	// 衝突時メソッド
 	//==============================
-	#modfunc charaHit var _mchara
+	#modfunc charaHit var _chara
 		_mStatus = 1
-		charaChangeStatus _mchara, 1
+		charaChangeStatus _chara, 1
 		return
 	//==============================
-	// Type変更メソッド
+	// 状態変更メソッド
 	//==============================
 	#modfunc charaChangeStatus int _i
 		_mStatus = _i
