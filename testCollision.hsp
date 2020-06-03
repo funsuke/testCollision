@@ -7,9 +7,11 @@
 #define COLLISION_LQTS
 
 #ifndef COLLISION_LQTS
-	#packopt name "当たり判定(全探索)"
+	// 全探索版
+	#packopt name "collision(all_search)"
 #else
-	#packopt name "当たり判定(四分木)"
+	// 四分木版
+	#packopt name "collision(quadtree_space)"
 #endif
 
 //**************************************************************
